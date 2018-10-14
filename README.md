@@ -1,9 +1,15 @@
-# QCGPU simulator backend for QISKit
 
-> Pluggable [QCGPU](https://qcgpu.github.io) simulator backend for QISKit Core 
+# Qiskit QCGPU Provider
 
-This module contains a [QISKit](https://www.qiskit.org/) simulator whose backend is based on the OpenCL based [QCGPU](https://qcgpu.github.io) library.
-This simulates a quantum circuit on a classical computer.
+This module contains [QISKit](https://www.qiskit.org/) 
+simulators using the OpenCL based [QCGPU](https://qcgpu.github.io) library.
+
+This provider adds two quantum circuit simulators, which are:
+
+* Statevector simulator - returns the statevector of a quantum circuit applied to the |0> state
+* Qasm simulator - simulates a qasm quantum circuit that has been compiled to run on the simulator.
+
+These simulation backends take advantage of the GPU or other OpenCL devices.
 
 ## Installation
 
@@ -24,4 +30,4 @@ For more information on QISKit and quantum simulations, look at the QISKit tutor
 
 ## License
 
-Licensed under the [MIT license](https://opensource.org/licenses/MIT), see `LICENSE.md`
+This project uses the [Apache License Version 2.0 software license.](https://www.apache.org/licenses/LICENSE-2.0)
