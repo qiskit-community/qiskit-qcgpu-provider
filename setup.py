@@ -30,6 +30,6 @@ setuptools.setup(
         "Programming Language :: Python :: 3.6",
         "Topic :: Scientific/Engineering",
     ],
-    install_requires=['qiskit>=0.6'],
+    install_requires=['qiskit>=0.6','qcgpu'],
     python_requires=">=3.5"
 )

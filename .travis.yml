@@ -1,0 +1,11 @@
+language: generic
+os: osx
+
+git:
+  depth: false
+
+install:
+  - pip3 install -e .
+
+script:
+  - make lint test

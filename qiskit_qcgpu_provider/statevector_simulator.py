@@ -13,10 +13,10 @@ Advantages:
 
 Limitations:
 1. Memory on the GPU is usually a lot less than that of a full machine,
-   which can limit the number of qubits simulated. However, you can use 
+   which can limit the number of qubits simulated. However, you can use
    the program on the CPU.
 2. As with all simulators, there is a limit to how accurate your results are.
-3. Many OpenCL devices don't support doubles, thus the simulator is limited to 
+3. Many OpenCL devices don't support doubles, thus the simulator is limited to
    using floats.
 """
 
@@ -24,18 +24,19 @@ import uuid
 import logging
 import time
 
-import qcgpu
-
 from qiskit.qobj import QobjItem
 from qiskit.backends import BaseBackend
 from qiskit.result._utils import result_from_old_style_dict
+import qcgpu
 
 from .job import QCGPUJob
 from .simulatorerror import QCGPUSimulatorError
 
 logger = logging.getLogger(__name__)
 
+
 class QCGPUStatevectorSimulator(BaseBackend):
+    """Contains an OpenCL based backend"""
 
     DEFAULT_CONFIGURATION = {
         'name': 'statevector_simulator',
@@ -66,7 +67,7 @@ class QCGPUStatevectorSimulator(BaseBackend):
         Args:
             qobj(dict): job description
 
-        Returns: 
+        Returns:
             LocalJob: derived from BaseJob
         """
 
@@ -81,13 +82,13 @@ class QCGPUStatevectorSimulator(BaseBackend):
         Args:
             job_id (str): A job id
             qobj (Qobj): Qobj structure
-        
+
         Returns:
             Result: Result is a class including the information to be returned to users.
                 Specifically, result_list in the return contains the information such as::
 
                     [{'data':
-                    { 
+                    {
                         'statevector': array([1.+0.j, 0.+0.j, 0.+0.j, 0.+0.j], dtype=complex64)
                     },
                     'status': 'DONE'
@@ -109,90 +110,90 @@ class QCGPUStatevectorSimulator(BaseBackend):
             'time_taken': (end-start)
         }
 
-        return result_from_old_style_dict(result, [circuit.header.name for circuit in qobj.experiments])
-
+        circuit_names = [circuit.header.name for circuit in qobj.experiments]
+        return result_from_old_style_dict(result, circuit_names)
 
     def run_circuit(self, circuit):
         """Run a circuit and return object.
 
         Args:
             circuit (QobjExperiement): Qobj experiment
-        
+
+        Raises:
+            QCGPUSimulatorError: If there is any issues with the simulation
+
         Returns:
-            dict
+            dict: The results of running the circuit
         """
         self._number_of_qubits = circuit.header.number_of_qubits
         self._statevector = 0
-        
+
         try:
             sim = qcgpu.State(self._number_of_qubits)
         except OverflowError:
             raise QCGPUSimulatorError('cannot simulate this many qubits')
 
-        
-        
         start = time.time()
-        for op in circuit.instructions:
-            if getattr(op, 'conditional', None):
+        for operation in circuit.instructions:
+            if getattr(operation, 'conditional', None):
                 raise QCGPUSimulatorError('conditional operations are not supported '
-                                        'in statevector simulators')
-            elif op.name == 'measure':
+                                          'in statevector simulators')
+            elif operation.name == 'measure':
                 raise QCGPUSimulatorError(
                     'measurements are not supported by statevector simulators')
-            elif op.name == 'id':
+            elif operation.name == 'id':
                 logger.info('Identity gates are ignored.')
-                pass
-            elif op.name == 'barrier':
+            elif operation.name == 'barrier':
                 # The simulation performs no gate level optimizations
                 # thus the barrier statement can be ignored with no
                 # difference to the outcome
                 logger.info('Barrier gates are ignored.')
-                pass
-            elif op.name == 'reset':
+            elif operation.name == 'reset':
                 raise QCGPUSimulatorError(
                     'reset operation not supported by statevector simulators')
-            elif op.name not in ['CX', 'U', 'cx', 'u1', 'u2', 'u3', 'h', 'x', 'y', 'z', 's', 't', 'measure']:
+            elif operation.name not in ['CX', 'U', 'cx', 'u1', 'u2', 'u3',
+                                        'h', 'x', 'y', 'z', 's', 't']:
                 err_msg = 'encountered unrecognized operation "{1}"'
-                raise QCGPUSimulatorError(err_msg.format(op.name))
+                raise QCGPUSimulatorError(err_msg.format(operation.name))
             # At this point the operation is valid, and the applications can happen
-            elif op.name in ['u', 'U', 'u3']:
-                target = op.qubits[0]
-                sim.u(target, op.params[0],
-                        op.params[1], op.params[2])
-            elif op.name == 'u2':
-                target = op.qubits[0]
-                sim.u2(target, op.params[0], op.params[1])
-            elif op.name == 'u1':
-                target = op.qubits[0]
-                sim.u1(target, op.params[0])
-            elif op.name == 'h':
-                target = op.qubits[0]
+            elif operation.name in ['u', 'U', 'u3']:
+                target = operation.qubits[0]
+                sim.u(target, operation.params[0],
+                      operation.params[1], operation.params[2])
+            elif operation.name == 'u2':
+                target = operation.qubits[0]
+                sim.u2(target, operation.params[0], operation.params[1])
+            elif operation.name == 'u1':
+                target = operation.qubits[0]
+                sim.u1(target, operation.params[0])
+            elif operation.name == 'h':
+                target = operation.qubits[0]
                 sim.h(target)
-            elif op.name == 'x':
-                target = op.qubits[0]
+            elif operation.name == 'x':
+                target = operation.qubits[0]
                 sim.x(target)
-            elif op.name == 'y':
-                target = op.qubits[0]
+            elif operation.name == 'y':
+                target = operation.qubits[0]
                 sim.y(target)
-            elif op.name == 'z':
-                target = op.qubits[0]
+            elif operation.name == 'z':
+                target = operation.qubits[0]
                 sim.z(target)
-            elif op.name == 's':
-                target = op.qubits[0]
+            elif operation.name == 's':
+                target = operation.qubits[0]
                 sim.s(target)
-            elif op.name == 't':
-                target = op.qubits[0]
+            elif operation.name == 't':
+                target = operation.qubits[0]
                 sim.t(target)
-            elif op.name in ['CX', 'cx']:
-                control = op.qubits[0]
-                target = op.qubits[1]
+            elif operation.name in ['CX', 'cx']:
+                control = operation.qubits[0]
+                target = operation.qubits[1]
                 sim.cx(control, target)
-        
+
         end = time.time()
 
         data = {'statevector': sim.amplitudes(),
                 'time': end-start}
-        
+
         return {'name': circuit.header.name,
                 'data': data,
                 'status': 'DONE',
