@@ -128,12 +128,13 @@ class QCGPUStatevectorSimulator(BaseBackend):
         self._number_of_qubits = circuit.header.number_of_qubits
         self._statevector = 0
 
+        start = time.time()
+
         try:
             sim = qcgpu.State(self._number_of_qubits)
         except OverflowError:
             raise QCGPUSimulatorError('cannot simulate this many qubits')
 
-        start = time.time()
         for operation in circuit.instructions:
             if getattr(operation, 'conditional', None):
                 raise QCGPUSimulatorError('conditional operations are not supported '

@@ -42,16 +42,16 @@ def bench_qiskit():
     return time.time() - start
 
 def bench_qcgpu():
-    start = time.time()
+    # start = time.time()
     job_sim = execute(qc, backend=qcgpu_backend)
     sim_result = job_sim.result()
-    print(sim_result.get_data())
-    return time.time() - start
-    # return sim_result.get_data()['time']
+    # print(sim_result.get_data())
+    # return time.time() - start
+    return sim_result.get_data()['time']
 
 
 # Reporting
-functions = bench_qcgpu,#, bench_qiskit 
+functions = bench_qcgpu, bench_qiskit 
 
 times = {f.__name__: [] for f in functions}
 
