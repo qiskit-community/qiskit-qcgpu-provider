@@ -58,7 +58,7 @@ times = {f.__name__: [] for f in functions}
 names = []
 means = []
 
-samples = 10
+samples = 25
 for i in range(samples):  # adjust accordingly so whole thing takes a few sec
     progress = (i+1) / (samples)
     print("\rProgress: [{0:50s}] {1:.1f}%".format('#' * int(progress * 50), progress*100), end="", flush=True)

@@ -18,13 +18,13 @@ First of all, you will have to have some OpenCL installation installed already.
 You can install this module from PyPI using pip:
 
 ```bash
-pip install qiskit-addon-qcgpu
+pip install qiskit-qcgpu-provider
 ```
 
 
 ## Usage
 
-The usage of this backend with QISKit is shown in the [usage example](https://github.com/QCGPU/qiskit-addon-qcgpu/blob/master/examples/qcgpu_backend.py).
+The usage of this backend with QISKit is shown in the [usage example](BROKEN). **FIX LINK**
 
 For more information on QISKit and quantum simulations, look at the QISKit tutorials and the [QISKit instructions page](https://github.com/QISKit/qiskit-core)
 
