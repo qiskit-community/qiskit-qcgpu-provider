@@ -72,7 +72,35 @@ def write_csv(writer, data):
 @click.option('--samples', default=5, help='Number of samples to take for each qubit.')
 @click.option('--qubits', default=5, help='How many qubits you want to test for')
 @click.option('--out', default='benchmark_data.csv', help='Where to store the CSV output of each test')
-def benchmark(samples, qubits, out):
+@click.option('--single', default=False, help='Only run the benchmark for a single amount of qubits, and print an analysis')
+def benchmark(samples, qubits, out, single):
+    if single:
+        functions = bench_qcgpu, bench_qiskit 
+        times = {f.__name__: [] for f in functions}
+
+        names = []
+        means = []
+
+        qc = construct_circuit(qubits)
+        # Run the benchmarks
+        for i in range(samples):
+            progress = (i) / (samples)
+            print("\rProgress: [{0:50s}] {1:.1f}%".format('#' * int(progress * 50), progress*100), end="", flush=True)
+
+            func = random.choice(functions)
+            t = func(qc)
+            times[func.__name__].append(t)
+
+        print('')
+
+        for name, numbers in times.items():
+            print('FUNCTION:', name, 'Used', len(numbers), 'times')
+            print('\tMEDIAN', statistics.median(numbers))
+            print('\tMEAN  ', statistics.mean(numbers))
+            print('\tSTDEV ', statistics.stdev(numbers))
+
+        return
+
     functions = bench_qcgpu, bench_qiskit 
     # times = {f.__name__: [] for f in functions}
     writer = create_csv(out)
