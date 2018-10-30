@@ -1,4 +1,3 @@
-
 """
 In this example a Bell state is made.
 """

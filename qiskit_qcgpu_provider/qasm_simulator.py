@@ -46,7 +46,7 @@ class QCGPUQasmSimulator(BaseBackend):
         'local': True,
         'description': 'An OpenCL based QASM simulator',
         'coupling_map': 'all-to-all',
-        'basis_gates': 'u1, u2, u3, cx, id, snapshot'
+        'basis_gates': 'u,u1,u2,u3,cx,id,snapshot'
     }
 
     def __init__(self, configuration=None, provider=None):
@@ -140,6 +140,7 @@ class QCGPUQasmSimulator(BaseBackend):
         outcomes = []
 
         start = time.time()
+        print(circuit)
         for i in range(self._shots):
             print(i/self._shots)
             self._classical_state = 0
