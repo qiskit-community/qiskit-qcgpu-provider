@@ -6,11 +6,15 @@ from qiskit.backends.providerutils import filter_backends
 from .statevector_simulator import QCGPUStatevectorSimulator
 from .qasm_simulator import QCGPUQasmSimulator
 
+import qcgpu
+
 class QCGPUProvider(BaseProvider):
     """Provider for local QCGPU backends."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(args, kwargs)
+
+        qcgpu.backend.create_context()
 
         self._backends = [QCGPUQasmSimulator(provider=self),
                           QCGPUStatevectorSimulator(provider=self)]

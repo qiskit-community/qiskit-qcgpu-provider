@@ -60,6 +60,7 @@ class QCGPUStatevectorSimulator(BaseBackend):
 
         self._number_of_qubits = None
         self._statevector = None
+        self._results = {}
 
     def run(self, qobj):
         """Run qobj asynchronously.
@@ -70,12 +71,19 @@ class QCGPUStatevectorSimulator(BaseBackend):
         Returns:
             LocalJob: derived from BaseJob
         """
-
+        
         job_id = str(uuid.uuid4())
-        job = QCGPUJob(self, job_id, self._run_job, qobj)
+        self._run_job(job_id, qobj)
+        job = QCGPUJob(self, job_id, self._return_res, qobj)
         job.submit()
         return job
 
+    def _return_res(self, job_id, qobj):
+        res = self._results[job_id]
+
+        return result_from_old_style_dict(res[0], res[1])
+
+    
     def _run_job(self, job_id, qobj):
         """Run circuits in qobj and return the result
 
@@ -109,10 +117,12 @@ class QCGPUStatevectorSimulator(BaseBackend):
             'success': True,
             'time_taken': (end-start)
         }
-
+        # print('circ')
         circuit_names = [circuit.header.name for circuit in qobj.experiments]
-        return result_from_old_style_dict(result, circuit_names)
+        res = (result, circuit_names)
+        self._results[job_id] = res
 
+    # @profile
     def run_circuit(self, circuit):
         """Run a circuit and return object.
 
@@ -129,6 +139,7 @@ class QCGPUStatevectorSimulator(BaseBackend):
         self._statevector = 0
 
         start = time.time()
+        # print(len(circuit.instructions))
 
         try:
             sim = qcgpu.State(self._number_of_qubits)
