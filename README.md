@@ -1,7 +1,7 @@
 
 # Qiskit QCGPU Provider
 
-This module contains [QISKit](https://www.qiskit.org/) 
+This module contains [Qiskit](https://www.qiskit.org/) 
 simulators using the OpenCL based [QCGPU](https://qcgpu.github.io) library.
 
 This provider adds two quantum circuit simulators, which are:
@@ -24,9 +24,9 @@ $ pip install qiskit-qcgpu-provider
 
 ## Usage
 
-The usage of this backend with QISKit is shown in the [usage example](https://github.com/Qiskit/qiskit-qcgpu-provider/tree/master/examples)
+The usage of this backend with Qiskit is shown in the [usage example](https://github.com/Qiskit/qiskit-qcgpu-provider/tree/master/examples)
 
-For more information on QISKit and quantum simulations, look at the QISKit tutorials and the [QISKit instructions page](https://github.com/Qiskit/qiskit-terra)
+For more information on Qiskit and quantum simulations, look at the Qiskit tutorials and the [Qiskit instructions page](https://github.com/Qiskit/qiskit-terra)
 
 ## License
 
