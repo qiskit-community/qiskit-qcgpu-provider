@@ -24,9 +24,13 @@ import uuid
 import logging
 import time
 
-from qiskit.qobj import QobjItem
+import numpy as np
+
 from qiskit.backends import BaseBackend
-from qiskit.result._utils import result_from_old_style_dict
+from qiskit.result import Result
+from qiskit.backends.models import BackendConfiguration
+
+
 import qcgpu
 
 from .job import QCGPUJob
@@ -38,146 +42,174 @@ logger = logging.getLogger(__name__)
 class QCGPUStatevectorSimulator(BaseBackend):
     """Contains an OpenCL based backend"""
 
-    DEFAULT_CONFIGURATION = {
-        'name': 'statevector_simulator',
-        'url': 'https://qcgpu.github.io',
-        'simulator': True,
-        'local': True,
-        'description': 'An OpenCL based statevector simulator',
-        'coupling_map': 'all-to-all',
-        'basis_gates': 'u,u1,u2,u3,cx,id,h,x,y,z,s,t'
-    }
+    MAX_QUBITS_MEMORY = 30  # Should do something smarter here,
+    # but needs to be implemented on the QCGPU side.
+    # Will also depend on choosing the optimal backend.
+
+    DEFAULT_CONFIGURATION = {'backend_name': 'statevector_simulator',
+                             'backend_version': '1.0.0',
+                             'n_qubits': MAX_QUBITS_MEMORY,
+                             'url': 'https://qcgpu.github.io',
+                             'simulator': True,
+                             'local': True,
+                             'conditional': False,
+                             'open_pulse': False,
+                             'memory': True,
+                             'max_shots': 65536,
+                             'description': 'An OpenCL based statevector simulator',
+                             'basis_gates': ['u1',
+                                             'u2',
+                                             'u3',
+                                             'cx',
+                                             'id',
+                                             'x',
+                                             'y',
+                                             'z',
+                                             'h',
+                                             's',
+                                             't'],
+                             'gates': [{'name': 'u1',
+                                        'parameters': ['lambda'],
+                                        'qasm_def': 'gate u1(lambda) q { U(0,0,lambda) q; }'},
+                                       {'name': 'u2',
+                                        'parameters': ['phi',
+                                                       'lambda'],
+                                        'qasm_def': 'gate u2(phi,lambda) q { U(pi/2,phi,lambda) q; }'},
+                                       {'name': 'u3',
+                                        'parameters': ['theta',
+                                                       'phi',
+                                                       'lambda'],
+                                        'qasm_def': 'gate u3(theta,phi,lambda) q { U(theta,phi,lambda) q; }'},
+                                       {'name': 'cx',
+                                        'parameters': ['c',
+                                                       't'],
+                                        'qasm_def': 'gate cx c,t { CX c,t; }'},
+                                       {'name': 'id',
+                                        'parameters': ['a'],
+                                        'qasm_def': 'gate id a { U(0,0,0) a; }'},
+                                       {'name': 'x',
+                                        'parameters': ['a'],
+                                        'qasm_def': 'gate x a { u3(pi,0,pi) a; }'},
+                                       {'name': 'y',
+                                        'parameters': ['a'],
+                                        'qasm_def': 'gate y a { u3(pi,pi/2,pi/2) a; }'},
+                                       {'name': 'z',
+                                        'parameters': ['z'],
+                                        'qasm_def': 'gate z a { u1(pi) a; }'},
+                                       {'name': 'h',
+                                        'parameters': ['a'],
+                                        'qasm_def': 'gate h a { u2(0,pi) a; }'},
+                                       {'name': 's',
+                                        'parameters': ['a'],
+                                        'qasm_def': 'gate s a { u1(pi/2) a; }'},
+                                       {'name': 't',
+                                        'parameters': ['a'],
+                                        'qasm_def': 'gate t a { u1(pi/4) a; }'},
+                                       ]}
 
     def __init__(self, configuration=None, provider=None):
-        """Initialize the QCGPUStatevectorSimulator object.
+        configuration = configuration or BackendConfiguration.from_dict(
+            self.DEFAULT_CONFIGURATION)
+        super().__init__(configuration=configuration, provider=provider)
 
-        Args:
-            configuration (dict): backend configuration
-            provider (QCGPUProvider): parent provider
-        """
-
-        super().__init__(configuration or self.DEFAULT_CONFIGURATION.copy(), provider=provider)
-
+        self._configuration = configuration
         self._number_of_qubits = None
         self._statevector = None
         self._results = {}
+        self._chop_threshold = 15  # chop to 10^-15
 
     def run(self, qobj):
         """Run qobj asynchronously.
 
         Args:
-            qobj(dict): job description
+            qobj (Qobj): payload of the experiment
 
         Returns:
-            LocalJob: derived from BaseJob
+            QCGPUJob: derived from BaseJob
         """
-        
         job_id = str(uuid.uuid4())
-        self._run_job(job_id, qobj)
-        job = QCGPUJob(self, job_id, self._return_res, qobj)
+        job = QCGPUJob(self, job_id, self._run_job, qobj)
         job.submit()
         return job
 
-    def _return_res(self, job_id, qobj):
-        res = self._results[job_id]
-
-        return result_from_old_style_dict(res[0], res[1])
-
-    
     def _run_job(self, job_id, qobj):
-        """Run circuits in qobj and return the result
+        """Run experiments in qobj
 
         Args:
-            job_id (str): A job id
-            qobj (Qobj): Qobj structure
+            job_id (str): unique id for the job.
+            qobj (Qobj): job description
 
         Returns:
-            Result: Result is a class including the information to be returned to users.
-                Specifically, result_list in the return contains the information such as::
-
-                    [{'data':
-                    {
-                        'statevector': array([1.+0.j, 0.+0.j, 0.+0.j, 0.+0.j], dtype=complex64)
-                    },
-                    'status': 'DONE'
-                    }]
+            Result: Result object
         """
         self._validate(qobj)
-        result_list = []
+        results = []
+
         start = time.time()
-        for circuit in qobj.experiments:
-            result_list.append(self.run_circuit(circuit))
+        for experiment in qobj.experiments:
+            results.append(self.run_experiment(experiment))
         end = time.time()
+
         result = {
-            'backend': self.name,
-            'id': qobj.qobj_id,
+            'backend_name': self.name(),
+            'backend_version': self._configuration.backend_version,
+            'qobj_id': qobj.qobj_id,
             'job_id': job_id,
-            'result': result_list,
+            'results': results,
             'status': 'COMPLETED',
             'success': True,
-            'time_taken': (end-start)
+            'time_taken': (end - start),
+            'header': qobj.header.as_dict()
         }
-        # print('circ')
-        circuit_names = [circuit.header.name for circuit in qobj.experiments]
-        res = (result, circuit_names)
-        self._results[job_id] = res
 
-    # @profile
-    def run_circuit(self, circuit):
-        """Run a circuit and return object.
+        return Result.from_dict(result)
+
+    def run_experiment(self, experiment):
+        """Run an experiment (circuit) and return a single experiment result.
 
         Args:
-            circuit (QobjExperiement): Qobj experiment
-
-        Raises:
-            QCGPUSimulatorError: If there is any issues with the simulation
+            experiment (QobjExperiment): experiment from qobj experiments list
 
         Returns:
-            dict: The results of running the circuit
+            dict: A dictionary of results.
+            dict: A result dictionary
+
+        Raises:
+            QCGPUSimulatorError: If the number of qubits is too large, or another
+                error occurs during execution.
         """
-        self._number_of_qubits = circuit.header.number_of_qubits
+        self._number_of_qubits = experiment.header.n_qubits
         self._statevector = 0
+        # experiment = experiment.as_dict()
+        qcgpu.backend.create_context()
 
         start = time.time()
-        # print(len(circuit.instructions))
 
         try:
             sim = qcgpu.State(self._number_of_qubits)
         except OverflowError:
-            raise QCGPUSimulatorError('cannot simulate this many qubits')
+            raise QCGPUSimulatorError('too many qubits')
 
-        for operation in circuit.instructions:
-            if getattr(operation, 'conditional', None):
-                raise QCGPUSimulatorError('conditional operations are not supported '
-                                          'in statevector simulators')
-            elif operation.name == 'measure':
-                raise QCGPUSimulatorError(
-                    'measurements are not supported by statevector simulators')
-            elif operation.name == 'id':
+        for operation in experiment.instructions:
+            params = operation.as_dict()['params']
+            if operation.name == 'id':
                 logger.info('Identity gates are ignored.')
             elif operation.name == 'barrier':
-                # The simulation performs no gate level optimizations
-                # thus the barrier statement can be ignored with no
-                # difference to the outcome
                 logger.info('Barrier gates are ignored.')
-            elif operation.name == 'reset':
-                raise QCGPUSimulatorError(
-                    'reset operation not supported by statevector simulators')
-            elif operation.name not in ['CX', 'U', 'cx', 'u1', 'u2', 'u3',
-                                        'h', 'x', 'y', 'z', 's', 't']:
-                err_msg = 'encountered unrecognized operation "{1}"'
-                raise QCGPUSimulatorError(err_msg.format(operation.name))
-            # At this point the operation is valid, and the applications can happen
-            elif operation.name in ['u', 'U', 'u3']:
+            elif operation.name == 'u3':
                 target = operation.qubits[0]
-                sim.u(target, operation.params[0],
-                      operation.params[1], operation.params[2])
+                sim.u(target, params[0],
+                      params[1], params[2])
             elif operation.name == 'u2':
                 target = operation.qubits[0]
-                sim.u2(target, operation.params[0], operation.params[1])
+                sim.u2(target, params[0], params[1])
             elif operation.name == 'u1':
                 target = operation.qubits[0]
-                sim.u1(target, operation.params[0])
+                sim.u1(target, params[0])
+            elif operation.name == 'cx':
+                control = operation.qubits[0]
+                target = operation.qubits[1]
+                sim.cx(control, target)
             elif operation.name == 'h':
                 target = operation.qubits[0]
                 sim.h(target)
@@ -196,58 +228,143 @@ class QCGPUStatevectorSimulator(BaseBackend):
             elif operation.name == 't':
                 target = operation.qubits[0]
                 sim.t(target)
-            elif operation.name in ['CX', 'cx']:
-                control = operation.qubits[0]
-                target = operation.qubits[1]
-                sim.cx(control, target)
 
         end = time.time()
 
-        data = {'statevector': sim.amplitudes(),
-                'time': end-start}
+        amps = sim.amplitudes().round(self._chop_threshold)
+        amps = np.stack((amps.real, amps.imag), axis=-1)
 
-        return {'name': circuit.header.name,
-                'data': data,
-                'status': 'DONE',
-                'success': True,
-                'shots': circuit.config.shots,
-                'time_taken': (end-start)}
+        return {
+            'name': experiment.header.name,
+            'shots': 1,
+            'data': {'statevector': amps},
+            'status': 'DONE',
+            'success': True,
+            'time_taken': (end - start),
+            'header': experiment.header.as_dict()
+        }
 
     def _validate(self, qobj):
-        """Semantic validations of the qobj which cannot be done via schemas.
-        Some of these may later move to backend schemas.
+        """
+        Make sure that there is:
         1. No shots
-        2. No measurements in the middle
-        Args:
-            qobj (Qobj): Qobj structure.
-        Raises:
-            QCGPUSimulatorError: if unsupported operations passed
+        2. No measurements until the end
         """
-        self._set_shots_to_1(qobj, False)
-        for circuit in qobj.experiments:
-            self._set_shots_to_1(circuit, True)
-            for operator in circuit.instructions:
-                if operator.name in ('measure', 'reset'):
+        if qobj.config.shots != 1:
+            logger.info('"%s" only supports 1 shot. Setting shots=1.',
+                        self.name())
+            qobj.config.shots = 1
+
+        for experiment in qobj.experiments:
+            name = experiment.header.name
+
+            if getattr(experiment.config, 'shots', 1) != 1:
+                logger.info(
+                    '"%s" only supports 1 shot. Setting shots=1 for circuit "%s".',
+                    self.name(), name)
+                experiment.config.shots = 1
+
+            for operation in experiment.instructions:
+                if operation.name in ['measure', 'reset']:
                     raise QCGPUSimulatorError(
-                        "In circuit {}: statevector simulator does not support measure or "
-                        "reset.".format(circuit.header.name))
+                        'Unsupported "%s" instruction "%s" ' +
+                        'in circuit "%s" ',
+                        self.name(),
+                        operation.name,
+                        name)
 
-    def _set_shots_to_1(self, qobj_item, include_name):
-        """Set the number of shots to 1.
-        Args:
-            qobj_item (QobjItem): QobjItem structure
-            include_name (bool): include the name of the item in the log entry
-        """
-        if not getattr(qobj_item, 'config', None):
-            qobj_item.config = QobjItem(shots=1)
+    # def run(self, qobj):
+    #     job_id = str(uuid.uuid4())
+    #     self._run_job(job_id, qobj)
+    #     job = QCGPUJob(self, job_id, self._return_res, qobj)
+    #     job.submit()
+    #     return job
 
-        if getattr(qobj_item.config, 'shots', None) != 1:
-            warn = 'statevector simulator only supports 1 shot. Setting shots=1'
-            if include_name:
-                try:
-                    warn += 'Setting shots=1 for circuit' + qobj_item.header.name
-                except AttributeError:
-                    pass
-            warn += '.'
-            logger.info(warn)
-        qobj_item.config.shots = 1
+    # def _return_res(self, job_id, qobj):
+    #     res = self._results[job_id]
+
+    #     return result_from_old_style_dict(res)
+
+    # def _run_job(self, job_id, qobj):
+    #     """Run circuits in qobj and return the result
+
+    #     Args:
+    #         job_id (str): A job id
+    #         qobj (Qobj): Qobj structure
+
+    #     Returns:
+    #         Result: Result is a class including the information to be returned to users.
+    # Specifically, result_list in the return contains the information such
+    # as::
+
+    #                 [{'data':
+    #                 {
+    #                     'statevector': array([1.+0.j, 0.+0.j, 0.+0.j, 0.+0.j], dtype=complex64)
+    #                 },
+    #                 'status': 'DONE'
+    #                 }]
+    #     """
+    #     self._validate(qobj)
+    #     result_list = []
+    #     start = time.time()
+    #     for circuit in qobj.experiments:
+    #         result_list.append(self.run_circuit(circuit))
+    #     end = time.time()
+    #     result = {
+    #         'backend': self.name,
+    #         'id': qobj.qobj_id,
+    #         'job_id': job_id,
+    #         'result': result_list,
+    #         'status': 'COMPLETED',
+    #         'success': True,
+    #         'time_taken': (end-start)
+    #     }
+    #     # print('circ')
+    #     circuit_names = [circuit.header.name for circuit in qobj.experiments]
+    #     res = (result, circuit_names)
+    #     self._results[job_id] = res
+
+    # # @profile
+
+    # def _validate(self, qobj):
+    #     """Semantic validations of the qobj which cannot be done via schemas.
+    #     Some of these may later move to backend schemas.
+    #     1. No shots
+    #     2. No measurements in the middle
+    #     Args:
+    #         qobj (Qobj): Qobj structure.
+    #     Raises:
+    #         QCGPUSimulatorError: if unsupported operations passed
+    #     """
+    #     self._set_shots_to_1(qobj, False)
+    #     for circuit in qobj.experiments:
+    #         self._set_shots_to_1(circuit, True)
+    #         for operator in circuit.instructions:
+    #             if operator.name in ('measure', 'reset'):
+    #                 raise QCGPUSimulatorError(
+    #                     "In circuit {}: statevector simulator does not support measure or "
+    #                     "reset.".format(circuit.header.name))
+
+    # def _set_shots_to_1(self, qobj_item, include_name):
+    #     """Set the number of shots to 1.
+    #     Args:
+    #         qobj_item (QobjItem): QobjItem structure
+    #         include_name (bool): include the name of the item in the log entry
+    #     """
+    #     if not getattr(qobj_item, 'config', None):
+    #         qobj_item.config = QobjItem(shots=1)
+
+    #     if getattr(qobj_item.config, 'shots', None) != 1:
+    #         warn = 'statevector simulator only supports 1 shot. Setting shots=1'
+    #         if include_name:
+    #             try:
+    #                 warn += 'Setting shots=1 for circuit' + qobj_item.header.name
+    #             except AttributeError:
+    #                 pass
+    #         warn += '.'
+    #         logger.info(warn)
+    #     qobj_item.config.shots = 1
+
+    # @staticmethod
+    # def name():
+    #     return 'statevector_simulator'

@@ -18,7 +18,7 @@ print(backend.name())
 print(backend.status())
 
 # returns the provider of the backend
-print(backend.provider) 
+print(backend.provider)
 
 # gets the configuration of the backend.
 print(backend.configuration())

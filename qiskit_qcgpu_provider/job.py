@@ -1,14 +1,14 @@
-"""This module implements the job classed used for QCGPUBackend objects.
-
-Based on the code from qiskit/qiskit-sympy-provider
+"""This module implements the job class used by simulator backends.
+Taken mostly from https://github.com/Qiskit/qiskit-terra/blob/master/qiskit/backends/builtinsimulators/simulatorsjob.py
 """
 
-import functools
+
+from concurrent import futures
 import logging
 import sys
-from concurrent import futures
+import functools
 
-from qiskit.backends import BaseJob, JobError, JobStatus
+from qiskit.backends import BaseJob, JobStatus, JobError
 from qiskit.qobj import validate_qobj_against_schema
 
 logger = logging.getLogger(__name__)
@@ -26,13 +26,14 @@ def requires_submit(func):
     @functools.wraps(func)
     def _wrapper(self, *args, **kwargs):
         if self._future is None:
-            raise JobError("Job not submitted yet!. You have to .submit() first!")
+            raise JobError(
+                "Job not submitted yet!. You have to .submit() first!")
         return func(self, *args, **kwargs)
     return _wrapper
 
 
 class QCGPUJob(BaseJob):
-    """QCGPU Job class.
+    """QCGPUJob class.
     Attributes:
         _executor (futures.Executor): executor to handle asynchronous jobs
     """
@@ -59,7 +60,8 @@ class QCGPUJob(BaseJob):
             raise JobError("We have already submitted the job!")
 
         validate_qobj_against_schema(self._qobj)
-        self._future = self._executor.submit(self._fn, self._job_id, self._qobj)
+        self._future = self._executor.submit(
+            self._fn, self._job_id, self._qobj)
 
     @requires_submit
     def result(self, timeout=None):
@@ -97,11 +99,14 @@ class QCGPUJob(BaseJob):
             _status = JobStatus.CANCELLED
         elif self._future.done():
             _status = JobStatus.DONE if self._future.exception() is None else JobStatus.ERROR
-        elif self._future._state == 'PENDING':
-            _status = JobStatus.QUEUED
         else:
-            raise JobError('Unexpected behavior of {0}'.format(
-                self.__class__.__name__))
+            # Note: There is an undocumented Future state: PENDING, that seems to show up when
+            # the job is enqueued, waiting for someone to pick it up. We need to deal with this
+            # state but there's no public API for it, so we are assuming that if the job is not
+            # in any of the previous states, is PENDING, ergo INITIALIZING for
+            # us.
+            _status = JobStatus.INITIALIZING
+
         return _status
 
     def backend(self):

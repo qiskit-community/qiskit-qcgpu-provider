@@ -23,7 +23,7 @@ class TestStatevectorSimulator(unittest.TestCase):
         result = execute(self.circ, backend).result()
         statevector = result.get_statevector()
 
-        self.assertEqual(result.get_status(), 'COMPLETED')
+        self.assertEqual(result.status, 'COMPLETED')
         self.assertAlmostEqual(statevector[0], math.sqrt(2) / 2)
         self.assertEqual(statevector[1], 0)
         self.assertEqual(statevector[2], 0)

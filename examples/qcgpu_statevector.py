@@ -30,7 +30,6 @@ backend_sim = Provider.get_backend('statevector_simulator')
 job_sim = execute(qc, backend_sim)
 result_sim = job_sim.result()
 
-print(result_sim.get_data())
 # Show the results
 print("simulation: ", result_sim)
 print(result_sim.get_statevector(qc))
