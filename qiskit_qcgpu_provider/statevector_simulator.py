@@ -268,9 +268,9 @@ class QCGPUStatevectorSimulator(BaseBackend):
                 if operation.name in ['measure', 'reset']:
                     raise QCGPUSimulatorError(
                         'Unsupported "{}" instruction "{}" in circuit "{}"'.format(
-                        self.name(),
-                        operation.name,
-                        name))
+                            self.name(),
+                            operation.name,
+                            name))
 
     @staticmethod
     def name():

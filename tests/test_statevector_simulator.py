@@ -7,6 +7,7 @@ from qiskit.quantum_info import state_fidelity
 
 from .case import MyTestCase
 
+
 class TestStatevectorSimulator(MyTestCase):
     """Test the state vector simulator"""
 

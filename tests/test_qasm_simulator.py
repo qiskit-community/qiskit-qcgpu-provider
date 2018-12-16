@@ -6,6 +6,7 @@ import unittest
 
 from .case import MyTestCase
 
+
 class TestQasmSimulator(MyTestCase):
     """
     Test the QASM Simulator
@@ -23,7 +24,7 @@ class TestQasmSimulator(MyTestCase):
         self.qobj.config.shots = shots
         result = self.sim.run(self.qobj).result()
         self.assertEqual(result.success, True)
-    
+
     def test_qasm_simulator(self):
         """Test data counts output for single circuit run against reference."""
         shots = 1024

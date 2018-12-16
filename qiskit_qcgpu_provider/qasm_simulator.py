@@ -150,7 +150,7 @@ class QCGPUQasmSimulator(BaseBackend):
         self._memory = qobj.config.memory
         self._qobj_config = qobj.config
         results = []
-        
+
         start = time.time()
         for experiment in qobj.experiments:
             results.append(self.run_experiment(experiment))
@@ -198,9 +198,9 @@ class QCGPUQasmSimulator(BaseBackend):
             # and set the maximum value to be (2 ** 31) - 1
             seed = np.random.randint(2147483647, dtype='int32')
         self._local_random.seed(seed)
-        
+
         self._can_sample(experiment)
-        
+
         if not self._sample_measure:
             raise QCGPUSimulatorError('Measurements are only supported at the end')
 
@@ -210,7 +210,7 @@ class QCGPUQasmSimulator(BaseBackend):
         samples = []
 
         start = time.time()
-            
+
         try:
             sim = qcgpu.State(self._number_of_qubits)
         except OverflowError:
@@ -225,7 +225,7 @@ class QCGPUQasmSimulator(BaseBackend):
             elif operation.name == 'u3':
                 target = operation.qubits[0]
                 sim.u(target, params[0],
-                    params[1], params[2])
+                      params[1], params[2])
             elif operation.name == 'u2':
                 target = operation.qubits[0]
                 sim.u2(target, params[0], params[1])
@@ -272,7 +272,6 @@ class QCGPUQasmSimulator(BaseBackend):
 
         if self._memory:
             data['memory'] = memory
-
 
         return {
             'name': experiment.header.name,
@@ -325,11 +324,6 @@ class QCGPUQasmSimulator(BaseBackend):
             value = bin(classical_state)[2:]
             memory.append(hex(int(value, 2)))
         return memory
-        
-        
-
-
-        print('probabiltiies', probabilites)
 
     def _can_sample(self, experiment):
         """Determine if sampling can be used for an experiment
@@ -341,22 +335,21 @@ class QCGPUQasmSimulator(BaseBackend):
             self._sample_measure = experiment.config.allows_measure_sampling
         else:
             measure_flag = False
-            
+
             for instruction in experiment.instructions:
-                if instruction.name == "reset" :
-                    self._sample_measure = False
-                    return 
-            
-            if measure_flag:
-                if instruction.name not in ["measure", "barrier", "id", "u0"]:
+                if instruction.name == "reset":
                     self._sample_measure = False
                     return
-            elif instruction.name == "measure":
-                measure_flag = True
+
+                if measure_flag:
+                    if instruction.name not in ["measure", "barrier", "id", "u0"]:
+                        self._sample_measure = False
+                        return
+                elif instruction.name == "measure":
+                    measure_flag = True
 
         self._sample_measure = True
-            
-    
+
     @staticmethod
     def name():
         return 'qasm_simulator'

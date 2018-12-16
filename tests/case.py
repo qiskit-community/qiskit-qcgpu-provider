@@ -15,9 +15,8 @@ def random_SU(n):
     """
     X = (random.randn(n, n) + 1j * random.randn(n, n))
     Q, R = linalg.qr(X)           # Q is a unitary matrix
-    Q /= pow(linalg.det(Q), 1/n)  # make Q a special unitary
+    Q /= pow(linalg.det(Q), 1 / n)  # make Q a special unitary
     return Q
-
 
 
 def build_model_circuits(n, depth):
@@ -45,8 +44,8 @@ def build_model_circuits(n, depth):
         perm = random.permutation(n)
         # For each consecutive pair in Pj, generate Haar random SU(4)
         # Decompose each SU(4) into CNOT + SU(2) and add to Ci
-        for k in range(math.floor(n/2)):
-            qubits = [int(perm[2*k]), int(perm[2*k+1])]
+        for k in range(math.floor(n / 2)):
+            qubits = [int(perm[2 * k]), int(perm[2 * k + 1])]
             SU = random_SU(4)
             decomposed_SU = two_qubit_kak(SU)
             for gate in decomposed_SU:
@@ -60,7 +59,7 @@ def build_model_circuits(n, depth):
                     circuit.u2(gate["params"][1], gate["params"][2], q[i0])
                 elif gate["name"] == "u3":
                     circuit.u3(gate["params"][0], gate["params"][1],
-                                gate["params"][2], q[i0])
+                               gate["params"][2], q[i0])
                 elif gate["name"] == "id":
                     pass
     # # Barrier before measurement to prevent reordering, then measure
@@ -69,6 +68,8 @@ def build_model_circuits(n, depth):
     return circuit
 
 # See the QISKIT Source Code
+
+
 class MyTestCase(unittest.TestCase):
     def random_circuit(self, n, depth):
         return build_model_circuits(n, depth)

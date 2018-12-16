@@ -28,7 +28,7 @@ class QCGPUProvider(BaseProvider):
 
     def backends(self, name=None, filters=None, **kwargs):
         backends = self._backends.values()
-        
+
         if name:
             try:
                 backends = [backend for backend in backends if backend.name() == name]
