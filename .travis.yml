@@ -5,6 +5,7 @@ git:
   depth: false
 
 install:
+  - pip3 install pybind11
   - pip3 install -e .
 
 script:
