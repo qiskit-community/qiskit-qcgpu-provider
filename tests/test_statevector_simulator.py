@@ -2,32 +2,28 @@ import unittest
 import math
 
 from qiskit_qcgpu_provider import QCGPUProvider
-from qiskit import execute, QuantumRegister, QuantumCircuit
+from qiskit import execute, QuantumRegister, QuantumCircuit, BasicAer
+from qiskit.quantum_info import state_fidelity
 
+from .case import MyTestCase
 
-class TestStatevectorSimulator(unittest.TestCase):
+class TestStatevectorSimulator(MyTestCase):
     """Test the state vector simulator"""
 
-    def setUp(self):
-        q = QuantumRegister(2)
-        circ = QuantumCircuit(q)
+    def test_computations(self):
+        for n in range(2, 10):
+            circ = self.random_circuit(n, 5)
+            self._compare_outcomes(circ)
 
-        circ.h(q[0])
-        circ.cx(q[0], q[1])
-
-        self.circ = circ
-
-    def test_statevector_simulator(self):
+    def _compare_outcomes(self, circ):
         Provider = QCGPUProvider()
-        backend = Provider.get_backend('statevector_simulator')
-        result = execute(self.circ, backend).result()
-        statevector = result.get_statevector()
+        backend_qcgpu = Provider.get_backend('statevector_simulator')
+        statevector_qcgpu = execute(circ, backend_qcgpu).result().get_statevector()
 
-        self.assertEqual(result.status, 'COMPLETED')
-        self.assertAlmostEqual(statevector[0], math.sqrt(2) / 2)
-        self.assertEqual(statevector[1], 0)
-        self.assertEqual(statevector[2], 0)
-        self.assertAlmostEqual(statevector[3], math.sqrt(2) / 2)
+        backend_qiskit = BasicAer.get_backend('statevector_simulator')
+        statevector_qiskit = execute(circ, backend_qiskit).result().get_statevector()
+
+        self.assertAlmostEqual(state_fidelity(statevector_qcgpu, statevector_qiskit), 1, 5)
 
 
 if __name__ == '__main__':
