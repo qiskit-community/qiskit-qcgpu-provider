@@ -260,6 +260,8 @@ class QCGPUQasmSimulator(BaseBackend):
 
         if self._number_of_cbits > 0:
             memory = self._add_sample_measure(samples, sim, self._shots)
+        else:
+            memory = []
 
         end = time.time()
 

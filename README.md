@@ -28,6 +28,15 @@ The usage of this backend with Qiskit is shown in the [usage example](https://gi
 
 For more information on Qiskit and quantum simulations, look at the Qiskit tutorials and the [Qiskit instructions page](https://github.com/Qiskit/qiskit-terra)
 
+## Benchmarking
+
+To benchmark this simulator against the `BasicAer` `qasm_simulator`,
+you can run
+
+```bash
+$ python3 benchmark.py --samples 15  --qubits 5 --single True
+```
+
 ## License
 
 This project uses the [Apache License Version 2.0 software license.](https://www.apache.org/licenses/LICENSE-2.0)
