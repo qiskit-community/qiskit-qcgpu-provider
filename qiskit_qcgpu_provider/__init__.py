@@ -8,11 +8,13 @@ from qiskit.backends.providerutils import filter_backends
 
 from .simulatorerror import QCGPUSimulatorError
 from .statevector_simulator import QCGPUStatevectorSimulator
+from .qasm_simulator import QCGPUQasmSimulator
 
 logger = logging.getLogger(__name__)
 
 SIMULATORS = [
-    QCGPUStatevectorSimulator
+    QCGPUStatevectorSimulator,
+    QCGPUQasmSimulator
 ]
 
 
@@ -26,6 +28,12 @@ class QCGPUProvider(BaseProvider):
 
     def backends(self, name=None, filters=None, **kwargs):
         backends = self._backends.values()
+        
+        if name:
+            try:
+                backends = [backend for backend in backends if backend.name() == name]
+            except LookupError:
+                pass
 
         return filter_backends(backends, filters=filters, **kwargs)
 

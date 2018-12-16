@@ -23,13 +23,13 @@ Limitations:
 import uuid
 import logging
 import time
+from collections import Counter
 
 import numpy as np
 
 from qiskit.backends import BaseBackend
 from qiskit.result import Result
 from qiskit.backends.models import BackendConfiguration
-
 
 import qcgpu
 
@@ -39,14 +39,14 @@ from .simulatorerror import QCGPUSimulatorError
 logger = logging.getLogger(__name__)
 
 
-class QCGPUStatevectorSimulator(BaseBackend):
+class QCGPUQasmSimulator(BaseBackend):
     """Contains an OpenCL based backend"""
 
     MAX_QUBITS_MEMORY = 30  # Should do something smarter here,
     # but needs to be implemented on the QCGPU side.
     # Will also depend on choosing the optimal backend.
 
-    DEFAULT_CONFIGURATION = {'backend_name': 'statevector_simulator',
+    DEFAULT_CONFIGURATION = {'backend_name': 'qasm_simulator',
                              'backend_version': '1.0.0',
                              'n_qubits': MAX_QUBITS_MEMORY,
                              'url': 'https://qcgpu.github.io',
@@ -56,7 +56,7 @@ class QCGPUStatevectorSimulator(BaseBackend):
                              'open_pulse': False,
                              'memory': True,
                              'max_shots': 65536,
-                             'description': 'An OpenCL based statevector simulator',
+                             'description': 'An OpenCL based qasm simulator',
                              'basis_gates': ['u1',
                                              'u2',
                                              'u3',
@@ -114,8 +114,12 @@ class QCGPUStatevectorSimulator(BaseBackend):
 
         self._configuration = configuration
         self._number_of_qubits = None
+        self._number_of_cbits = None
         self._statevector = None
         self._results = {}
+        self._shots = {}
+        self._local_random = np.random.RandomState()
+        self._sample_measure = False
         self._chop_threshold = 15  # chop to 10^-15
 
     def run(self, qobj):
@@ -142,9 +146,11 @@ class QCGPUStatevectorSimulator(BaseBackend):
         Returns:
             Result: Result object
         """
-        self._validate(qobj)
+        self._shots = qobj.config.shots
+        self._memory = qobj.config.memory
+        self._qobj_config = qobj.config
         results = []
-
+        
         start = time.time()
         for experiment in qobj.experiments:
             results.append(self.run_experiment(experiment))
@@ -179,12 +185,32 @@ class QCGPUStatevectorSimulator(BaseBackend):
                 error occurs during execution.
         """
         self._number_of_qubits = experiment.header.n_qubits
+        self._number_of_cbits = experiment.header.memory_slots
+        self._classical_state = 0
         self._statevector = 0
+
+        if hasattr(experiment.config, 'seed'):
+            seed = experiment.config.seed
+        elif hasattr(self._qobj_config, 'seed'):
+            seed = self._qobj_config.seed
+        else:
+            # For compatibility on Windows force dyte to be int32
+            # and set the maximum value to be (2 ** 31) - 1
+            seed = np.random.randint(2147483647, dtype='int32')
+        self._local_random.seed(seed)
+        
+        self._can_sample(experiment)
+        
+        if not self._sample_measure:
+            raise QCGPUSimulatorError('Measurements are only supported at the end')
+
         # experiment = experiment.as_dict()
         qcgpu.backend.create_context()
 
-        start = time.time()
+        samples = []
 
+        start = time.time()
+            
         try:
             sim = qcgpu.State(self._number_of_qubits)
         except OverflowError:
@@ -199,7 +225,7 @@ class QCGPUStatevectorSimulator(BaseBackend):
             elif operation.name == 'u3':
                 target = operation.qubits[0]
                 sim.u(target, params[0],
-                      params[1], params[2])
+                    params[1], params[2])
             elif operation.name == 'u2':
                 target = operation.qubits[0]
                 sim.u2(target, params[0], params[1])
@@ -228,51 +254,107 @@ class QCGPUStatevectorSimulator(BaseBackend):
             elif operation.name == 't':
                 target = operation.qubits[0]
                 sim.t(target)
+            elif operation.name == 'measure':
+                # only doing sample based measurements
+                samples.append((operation.qubits[0], operation.memory[0]))
+
+        if self._number_of_cbits > 0:
+            memory = self._add_sample_measure(samples, sim, self._shots)
 
         end = time.time()
 
-        amps = sim.amplitudes().round(self._chop_threshold)
-        amps = np.stack((amps.real, amps.imag), axis=-1)
+        # amps = sim.amplitudes().round(self._chop_threshold)
+        # amps = np.stack((amps.real, amps.imag), axis=-1)
+
+        data = {'counts': dict(Counter(memory))}
+
+        if self._memory:
+            data['memory'] = memory
+
 
         return {
             'name': experiment.header.name,
-            'shots': 1,
-            'data': {'statevector': amps},
+            'shots': self._shots,
+            'data': data,
+            'seed': seed,
             'status': 'DONE',
             'success': True,
             'time_taken': (end - start),
             'header': experiment.header.as_dict()
         }
 
-    def _validate(self, qobj):
+    def _add_sample_measure(self, measure_params, sim, num_samples):
+        """Generate memory samples from the current statevector
+
+        Args:
+            measure_params (list): List of (qubit, clbit) values for
+                                   measure instructions to sample.
+            num_samples (int): The number of memory samples to generate.
+
+        Returns:
+            list: A list of memory values in hex format.
         """
-        Make sure that there is:
-        1. No shots
-        2. No measurements until the end
+        # This bit of code is pretty much directly from the other
+        # simulators. It could probably be done better.
+        probabilities = sim.probabilities()
+
+        # Get unique qubits that are actually measured
+        measured_qubits = list(set([qubit for qubit, clbit in measure_params]))
+        num_measured = len(measured_qubits)
+        # Axis for numpy.sum to compute probabilities
+        axis = list(range(self._number_of_qubits))
+        for qubit in reversed(measured_qubits):
+            # Remove from largest qubit to smallest so list position is correct
+            # with respect to position from end of the list
+            axis.remove(self._number_of_qubits - 1 - qubit)
+        probabilities = np.reshape(np.sum(probabilities, axis=tuple(axis)),
+                                   2 ** num_measured)
+        # Generate samples on measured qubits
+        samples = self._local_random.choice(range(2 ** num_measured),
+                                            num_samples, p=probabilities)
+        # Convert to bit-strings
+        memory = []
+        for sample in samples:
+            classical_state = self._classical_state
+            for qubit, cbit in measure_params:
+                qubit_outcome = int((sample & (1 << qubit)) >> qubit)
+                bit = 1 << cbit
+                classical_state = (classical_state & (~bit)) | (qubit_outcome << cbit)
+            value = bin(classical_state)[2:]
+            memory.append(hex(int(value, 2)))
+        return memory
+        
+        
+
+
+        print('probabiltiies', probabilites)
+
+    def _can_sample(self, experiment):
+        """Determine if sampling can be used for an experiment
+
+        Args:
+            experiment (QobjExperiment): a qobj experiment
         """
-        if qobj.config.shots != 1:
-            logger.info('"%s" only supports 1 shot. Setting shots=1.',
-                        self.name())
-            qobj.config.shots = 1
+        if hasattr(experiment.config, 'allows_measure_sampling'):
+            self._sample_measure = experiment.config.allows_measure_sampling
+        else:
+            measure_flag = False
+            
+            for instruction in experiment.instructions:
+                if instruction.name == "reset" :
+                    self._sample_measure = False
+                    return 
+            
+            if measure_flag:
+                if instruction.name not in ["measure", "barrier", "id", "u0"]:
+                    self._sample_measure = False
+                    return
+            elif instruction.name == "measure":
+                measure_flag = True
 
-        for experiment in qobj.experiments:
-            name = experiment.header.name
-
-            if getattr(experiment.config, 'shots', 1) != 1:
-                logger.info(
-                    '"%s" only supports 1 shot. Setting shots=1 for circuit "%s".',
-                    self.name(), name)
-                experiment.config.shots = 1
-
-            for operation in experiment.instructions:
-                if operation.name in ['measure', 'reset']:
-                    raise QCGPUSimulatorError(
-                        'Unsupported "%s" instruction "%s" ' +
-                        'in circuit "%s" ',
-                        self.name(),
-                        operation.name,
-                        name)
-
+        self._sample_measure = True
+            
+    
     @staticmethod
     def name():
-        return 'statevector_simulator'
+        return 'qasm_simulator'
