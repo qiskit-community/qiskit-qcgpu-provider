@@ -26,9 +26,9 @@ import time
 
 import numpy as np
 
-from qiskit.backends import BaseBackend
+from qiskit.providers import BaseBackend
 from qiskit.result import Result
-from qiskit.backends.models import BackendConfiguration
+from qiskit.providers.models import BackendConfiguration
 
 
 import qcgpu

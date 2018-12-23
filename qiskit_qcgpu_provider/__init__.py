@@ -3,8 +3,8 @@
 from collections import OrderedDict
 import logging
 
-from qiskit.backends import BaseProvider
-from qiskit.backends.providerutils import filter_backends
+from qiskit.providers import BaseProvider
+from qiskit.providers.providerutils import filter_backends
 
 from .simulatorerror import QCGPUSimulatorError
 from .statevector_simulator import QCGPUStatevectorSimulator

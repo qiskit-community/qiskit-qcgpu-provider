@@ -27,9 +27,9 @@ from collections import Counter
 
 import numpy as np
 
-from qiskit.backends import BaseBackend
+from qiskit.providers import BaseBackend
 from qiskit.result import Result
-from qiskit.backends.models import BackendConfiguration
+from qiskit.providers.models import BackendConfiguration
 
 import qcgpu
 
@@ -331,22 +331,36 @@ class QCGPUQasmSimulator(BaseBackend):
         Args:
             experiment (QobjExperiment): a qobj experiment
         """
+        measure_flags = {}
+        # print(experiment.instructions)
         if hasattr(experiment.config, 'allows_measure_sampling'):
             self._sample_measure = experiment.config.allows_measure_sampling
         else:
             measure_flag = False
 
+
             for instruction in experiment.instructions:
                 if instruction.name == "reset":
-                    self._sample_measure = False
+                    measure_flags[instruction.qubits[0]] = False
+                    # self._sample_measure = False
                     return
 
-                if measure_flag:
+                if measure_flags.get(instruction.qubits[0], False):
                     if instruction.name not in ["measure", "barrier", "id", "u0"]:
-                        self._sample_measure = False
-                        return
+                        for qubit in instruction.qubits:
+                            measure_flags[qubit] = False
+                            return
                 elif instruction.name == "measure":
-                    measure_flag = True
+                     for qubit in instruction.qubits:
+                            measure_flags[qubit] = True
+        
+        self._sample_measure = True
+
+        for key, value in measure_flags.items():
+            if value == False:
+                self._sample_measure = False
+            
+            return
 
         self._sample_measure = True
 
