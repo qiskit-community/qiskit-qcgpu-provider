@@ -8,12 +8,11 @@ import math
 
 from qiskit import ClassicalRegister, QuantumRegister, QuantumCircuit
 from qiskit.wrapper import load_qasm_file
-from qiskit import QISKitError, execute, BasicAer
+from qiskit import QISKitError, execute, Aer
 
 from qiskit_qcgpu_provider import QCGPUProvider
 
 # Implementation of the Quantum Fourier Transform
-
 
 def construct_circuit(num_qubits):
     q = QuantumRegister(num_qubits)
@@ -25,14 +24,16 @@ def construct_circuit(num_qubits):
         for k in range(j):
             circ.cu1(math.pi / float(2**(j - k)), q[j], q[k])
         circ.h(q[j])
-    circ.measure(q, c)
+    # circ.measure(q, c)
 
     return circ
 
 
 # Benchmarking functions
-qiskit_backend = BasicAer.get_backend('qasm_simulator')
-qcgpu_backend = QCGPUProvider().get_backend('qasm_simulator')
+# qiskit_backend = Aer.get_backend('qasm_simulator')
+# qcgpu_backend = QCGPUProvider().get_backend('qasm_simulator')
+qiskit_backend = Aer.get_backend('statevector_simulator')
+qcgpu_backend = QCGPUProvider().get_backend('statevector_simulator')
 
 
 def bench_qiskit(qc):

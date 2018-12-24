@@ -23,13 +23,11 @@ Limitations:
 import uuid
 import logging
 import time
-
 import numpy as np
 
 from qiskit.providers import BaseBackend
 from qiskit.result import Result
 from qiskit.providers.models import BackendConfiguration
-
 
 import qcgpu
 
@@ -127,11 +125,14 @@ class QCGPUStatevectorSimulator(BaseBackend):
         Returns:
             QCGPUJob: derived from BaseJob
         """
+        
+        qcgpu.backend._create_context()
+
         job_id = str(uuid.uuid4())
-        job = QCGPUJob(self, job_id, self._run_job, qobj)
-        job.submit()
+        job = QCGPUJob(self, job_id, self._run_job(job_id, qobj), qobj)
         return job
 
+    #@profile
     def _run_job(self, job_id, qobj):
         """Run experiments in qobj
 
@@ -162,8 +163,9 @@ class QCGPUStatevectorSimulator(BaseBackend):
             'header': qobj.header.as_dict()
         }
 
-        return Result.from_dict(result)
+        return Result.from_dict(result) # This can be sped up
 
+    #@profile
     def run_experiment(self, experiment):
         """Run an experiment (circuit) and return a single experiment result.
 
@@ -180,8 +182,7 @@ class QCGPUStatevectorSimulator(BaseBackend):
         """
         self._number_of_qubits = experiment.header.n_qubits
         self._statevector = 0
-        # experiment = experiment.as_dict()
-        qcgpu.backend.create_context()
+        experiment = experiment.as_dict()
 
         start = time.time()
 
@@ -190,60 +191,50 @@ class QCGPUStatevectorSimulator(BaseBackend):
         except OverflowError:
             raise QCGPUSimulatorError('too many qubits')
 
-        for operation in experiment.instructions:
-            params = operation.as_dict()['params']
-            if operation.name == 'id':
+        for operation in experiment['instructions']:
+            params = operation['params']
+            name = operation['name']
+
+            if name == 'id':
                 logger.info('Identity gates are ignored.')
-            elif operation.name == 'barrier':
+            elif name == 'barrier':
                 logger.info('Barrier gates are ignored.')
-            elif operation.name == 'u3':
-                target = operation.qubits[0]
-                sim.u(target, params[0],
-                      params[1], params[2])
-            elif operation.name == 'u2':
-                target = operation.qubits[0]
-                sim.u2(target, params[0], params[1])
-            elif operation.name == 'u1':
-                target = operation.qubits[0]
-                sim.u1(target, params[0])
-            elif operation.name == 'cx':
-                control = operation.qubits[0]
-                target = operation.qubits[1]
-                sim.cx(control, target)
-            elif operation.name == 'h':
-                target = operation.qubits[0]
-                sim.h(target)
-            elif operation.name == 'x':
-                target = operation.qubits[0]
-                sim.x(target)
-            elif operation.name == 'y':
-                target = operation.qubits[0]
-                sim.y(target)
-            elif operation.name == 'z':
-                target = operation.qubits[0]
-                sim.z(target)
-            elif operation.name == 's':
-                target = operation.qubits[0]
-                sim.s(target)
-            elif operation.name == 't':
-                target = operation.qubits[0]
-                sim.t(target)
+            elif name == 'u3':
+                sim.u(operation['qubits'][0], *params)
+            elif name == 'u2':
+                sim.u2(operation['qubits'][0], *params)
+            elif name == 'u1':
+                sim.u1(operation['qubits'][0], *params)
+            elif name == 'cx':
+                sim.cx(*operation['qubits'])
+            elif name == 'h':
+                sim.h(operation['qubits'][0])
+            elif name == 'x':
+                sim.x(operation['qubits'][0])
+            elif name == 'y':
+                sim.y(operation['qubits'][0])
+            elif name == 'z':
+                sim.z(operation['qubits'][0])
+            elif name == 's':
+                sim.s(operation['qubits'][0])
+            elif name == 't':
+                sim.t(operation['qubits'][0])
 
         end = time.time()
 
         amps = sim.amplitudes().round(self._chop_threshold)
         amps = np.stack((amps.real, amps.imag), axis=-1)
-
         return {
-            'name': experiment.header.name,
+            'name': experiment['header']['name'],
             'shots': 1,
             'data': {'statevector': amps},
             'status': 'DONE',
             'success': True,
             'time_taken': (end - start),
-            'header': experiment.header.as_dict()
+            'header': experiment['header']
         }
 
+    #@profile
     def _validate(self, qobj):
         """
         Make sure that there is:

@@ -9,7 +9,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="qiskit-qcgpu-provider",
-    version="0.1.0",
+    version="0.2.0",
     author="Adam Kelly",
     author_email="adamkelly2201@gmail.com",
     description="An OpenCL based quantum computer simulator",

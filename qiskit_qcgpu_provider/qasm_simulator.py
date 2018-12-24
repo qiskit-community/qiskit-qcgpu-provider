@@ -122,6 +122,7 @@ class QCGPUQasmSimulator(BaseBackend):
         self._sample_measure = False
         self._chop_threshold = 15  # chop to 10^-15
 
+    #@profile
     def run(self, qobj):
         """Run qobj asynchronously.
 
@@ -131,11 +132,12 @@ class QCGPUQasmSimulator(BaseBackend):
         Returns:
             QCGPUJob: derived from BaseJob
         """
-        job_id = str(uuid.uuid4())
-        job = QCGPUJob(self, job_id, self._run_job, qobj)
-        job.submit()
-        return job
+        qcgpu.backend._create_context()
 
+        job_id = str(uuid.uuid4())
+        job = QCGPUJob(self, job_id, self._run_job(job_id, qobj), qobj)
+        return job
+    #@profile
     def _run_job(self, job_id, qobj):
         """Run experiments in qobj
 
@@ -170,6 +172,7 @@ class QCGPUQasmSimulator(BaseBackend):
 
         return Result.from_dict(result)
 
+    #@profile
     def run_experiment(self, experiment):
         """Run an experiment (circuit) and return a single experiment result.
 
@@ -204,8 +207,8 @@ class QCGPUQasmSimulator(BaseBackend):
         if not self._sample_measure:
             raise QCGPUSimulatorError('Measurements are only supported at the end')
 
-        # experiment = experiment.as_dict()
-        qcgpu.backend.create_context()
+        experiment = experiment.as_dict()
+        # qcgpu.backend.create_context()
 
         samples = []
 
@@ -216,47 +219,36 @@ class QCGPUQasmSimulator(BaseBackend):
         except OverflowError:
             raise QCGPUSimulatorError('too many qubits')
 
-        for operation in experiment.instructions:
-            params = operation.as_dict()['params']
-            if operation.name == 'id':
+        for operation in experiment['instructions']:
+            params = operation['params']
+            name = operation['name']
+
+            if name == 'id':
                 logger.info('Identity gates are ignored.')
-            elif operation.name == 'barrier':
+            elif name == 'barrier':
                 logger.info('Barrier gates are ignored.')
-            elif operation.name == 'u3':
-                target = operation.qubits[0]
-                sim.u(target, params[0],
-                      params[1], params[2])
-            elif operation.name == 'u2':
-                target = operation.qubits[0]
-                sim.u2(target, params[0], params[1])
-            elif operation.name == 'u1':
-                target = operation.qubits[0]
-                sim.u1(target, params[0])
-            elif operation.name == 'cx':
-                control = operation.qubits[0]
-                target = operation.qubits[1]
-                sim.cx(control, target)
-            elif operation.name == 'h':
-                target = operation.qubits[0]
-                sim.h(target)
-            elif operation.name == 'x':
-                target = operation.qubits[0]
-                sim.x(target)
-            elif operation.name == 'y':
-                target = operation.qubits[0]
-                sim.y(target)
-            elif operation.name == 'z':
-                target = operation.qubits[0]
-                sim.z(target)
-            elif operation.name == 's':
-                target = operation.qubits[0]
-                sim.s(target)
-            elif operation.name == 't':
-                target = operation.qubits[0]
-                sim.t(target)
-            elif operation.name == 'measure':
-                # only doing sample based measurements
-                samples.append((operation.qubits[0], operation.memory[0]))
+            elif name == 'u3':
+                sim.u(operation['qubits'][0], *params)
+            elif name == 'u2':
+                sim.u2(operation['qubits'][0], *params)
+            elif name == 'u1':
+                sim.u1(operation['qubits'][0], *params)
+            elif name == 'cx':
+                sim.cx(*operation['qubits'])
+            elif name == 'h':
+                sim.h(operation['qubits'][0])
+            elif name == 'x':
+                sim.x(operation['qubits'][0])
+            elif name == 'y':
+                sim.y(operation['qubits'][0])
+            elif name == 'z':
+                sim.z(operation['qubits'][0])
+            elif name == 's':
+                sim.s(operation['qubits'][0])
+            elif name == 't':
+                sim.t(operation['qubits'][0])
+            elif name == 'measure':
+                samples.append((operation['qubits'][0], operation['memory'][0]))
 
         if self._number_of_cbits > 0:
             memory = self._add_sample_measure(samples, sim, self._shots)
@@ -274,41 +266,46 @@ class QCGPUQasmSimulator(BaseBackend):
             data['memory'] = memory
 
         return {
-            'name': experiment.header.name,
+            'name': experiment['header']['name'],
             'shots': self._shots,
             'data': data,
             'seed': seed,
             'status': 'DONE',
             'success': True,
             'time_taken': (end - start),
-            'header': experiment.header.as_dict()
+            'header': experiment['header']
         }
 
+    #@profile
     def _add_sample_measure(self, measure_params, sim, num_samples):
-        """Generate memory samples from the current statevector
+        """Generate memory samples from current statevector.
+        Taken almost straight from the terra source code.
 
         Args:
             measure_params (list): List of (qubit, clbit) values for
                                    measure instructions to sample.
             num_samples (int): The number of memory samples to generate.
-
         Returns:
             list: A list of memory values in hex format.
         """
-        # This bit of code is pretty much directly from the other
-        # simulators. It could probably be done better.
-        probabilities = sim.probabilities()
+        probabilities = np.reshape(sim.probabilities(), self._number_of_qubits * [2])
 
         # Get unique qubits that are actually measured
         measured_qubits = list(set([qubit for qubit, clbit in measure_params]))
         num_measured = len(measured_qubits)
+
+
         # Axis for numpy.sum to compute probabilities
         axis = list(range(self._number_of_qubits))
+
         for qubit in reversed(measured_qubits):
             # Remove from largest qubit to smallest so list position is correct
             # with respect to position from end of the list
             axis.remove(self._number_of_qubits - 1 - qubit)
-        probabilities = np.reshape(np.sum(probabilities, axis=tuple(axis)),
+        
+        
+        probabilities = np.reshape(np.sum(probabilities,
+                                          axis=tuple(axis)),
                                    2 ** num_measured)
         # Generate samples on measured qubits
         samples = self._local_random.choice(range(2 ** num_measured),
@@ -325,6 +322,7 @@ class QCGPUQasmSimulator(BaseBackend):
             memory.append(hex(int(value, 2)))
         return memory
 
+    #@profile
     def _can_sample(self, experiment):
         """Determine if sampling can be used for an experiment
 
@@ -332,17 +330,14 @@ class QCGPUQasmSimulator(BaseBackend):
             experiment (QobjExperiment): a qobj experiment
         """
         measure_flags = {}
-        # print(experiment.instructions)
         if hasattr(experiment.config, 'allows_measure_sampling'):
             self._sample_measure = experiment.config.allows_measure_sampling
         else:
-            measure_flag = False
-
 
             for instruction in experiment.instructions:
                 if instruction.name == "reset":
                     measure_flags[instruction.qubits[0]] = False
-                    # self._sample_measure = False
+                    self._sample_measure = False
                     return
 
                 if measure_flags.get(instruction.qubits[0], False):
@@ -359,10 +354,7 @@ class QCGPUQasmSimulator(BaseBackend):
         for key, value in measure_flags.items():
             if value == False:
                 self._sample_measure = False
-            
-            return
-
-        self._sample_measure = True
+                return
 
     @staticmethod
     def name():
