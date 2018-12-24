@@ -16,7 +16,7 @@ setuptools.setup(
     long_description=LONG_DESCRIPTION,
     url="https://qcgpu.github.io",
     packages=setuptools.find_packages(),
-    setup_requires=['qcgpu'],
+    setup_requires=['qcgpu>=0.1.0'],
     license="Apache 2.0",
     classifiers=[
         "Environment :: Console",
@@ -30,6 +30,6 @@ setuptools.setup(
         "Programming Language :: Python :: 3.6",
         "Topic :: Scientific/Engineering",
     ],
-    install_requires=['qiskit>=0.7', 'qcgpu'],
+    install_requires=['qiskit>=0.7', 'qcgpu>=0.1.0'],
     python_requires=">=3.5"
 )
