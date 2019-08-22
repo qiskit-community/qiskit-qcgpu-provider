@@ -220,7 +220,7 @@ class QCGPUQasmSimulator(BaseBackend):
             raise QCGPUSimulatorError('too many qubits')
 
         for operation in experiment['instructions']:
-            params = operation['params']
+            params = getattr(operation, 'params', [])
             name = operation['name']
 
             if name == 'id':
