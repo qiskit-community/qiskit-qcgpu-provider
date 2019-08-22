@@ -2,10 +2,10 @@
 Exception for errors raised by QCGPU simulators
 """
 
-from qiskit import QISKitError
+from qiskit import QiskitError
 
 
-class QCGPUSimulatorError(QISKitError):
+class QCGPUSimulatorError(QiskitError):
     """Base class for errors raised by simulators."""
 
     def __init__(self, *message):
