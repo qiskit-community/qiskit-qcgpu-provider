@@ -16,6 +16,7 @@ class TestStatevectorSimulator(MyTestCase):
             circ = self.random_circuit(n, 5)
             self._compare_outcomes(circ)
 
+
     def _compare_outcomes(self, circ):
         Provider = QCGPUProvider()
         backend_qcgpu = Provider.get_backend('statevector_simulator')

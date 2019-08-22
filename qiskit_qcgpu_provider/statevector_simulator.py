@@ -55,6 +55,7 @@ class QCGPUStatevectorSimulator(BaseBackend):
                              'memory': True,
                              'max_shots': 65536,
                              'description': 'An OpenCL based statevector simulator',
+                             'coupling_map': None,
                              'basis_gates': ['u1',
                                              'u2',
                                              'u3',
@@ -160,7 +161,7 @@ class QCGPUStatevectorSimulator(BaseBackend):
             'status': 'COMPLETED',
             'success': True,
             'time_taken': (end - start),
-            'header': qobj.header.as_dict()
+            'header': qobj.header.to_dict()
         }
 
         return Result.from_dict(result) # This can be sped up
@@ -182,7 +183,8 @@ class QCGPUStatevectorSimulator(BaseBackend):
         """
         self._number_of_qubits = experiment.header.n_qubits
         self._statevector = 0
-        experiment = experiment.as_dict()
+        experiment = experiment.to_dict()
+        
 
         start = time.time()
 
@@ -193,9 +195,8 @@ class QCGPUStatevectorSimulator(BaseBackend):
 
 
         for operation in experiment['instructions']:
-            params = getattr(operation, 'params', [])
+            params = operation.get('params', [])
             name = operation['name']
-
             if name == 'id':
                 logger.info('Identity gates are ignored.')
             elif name == 'barrier':

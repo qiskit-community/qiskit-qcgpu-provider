@@ -1,6 +1,6 @@
 from qiskit_qcgpu_provider import QCGPUProvider
 from qiskit import ClassicalRegister, QuantumRegister, QuantumCircuit
-from qiskit import compile
+from qiskit.compiler import assemble
 
 import unittest
 
@@ -17,7 +17,7 @@ class TestQasmSimulator(MyTestCase):
         self.sim = QCGPUProvider().get_backend('qasm_simulator')
         qasm_file = 'tests/example.qasm'
         circ = QuantumCircuit.from_qasm_file(qasm_file)
-        self.qobj = compile(circ, backend=self.sim)
+        self.qobj = assemble(circ, backend=self.sim)
 
     def test_qasm_simulator_single_show(self):
         shots = 1
@@ -52,7 +52,7 @@ class TestQasmSimulator(MyTestCase):
         circ.measure(qr[3], cr1[1])
 
         shots = 50
-        qobj = compile(circ, backend=self.sim, shots=shots, memory=True)
+        qobj = assemble(circ, backend=self.sim, shots=shots, memory=True)
         result = self.sim.run(qobj).result()
         memory = result.get_memory()
         self.assertEqual(len(memory), shots)

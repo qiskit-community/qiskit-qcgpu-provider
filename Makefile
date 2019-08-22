@@ -7,4 +7,5 @@ style:
 	python3 -m pycodestyle --max-line-length=120 qiskit_qcgpu_provider tests
 
 test:
-	python3 -m unittest discover
+
+	PYOPENCL_CTX='0' nosetests

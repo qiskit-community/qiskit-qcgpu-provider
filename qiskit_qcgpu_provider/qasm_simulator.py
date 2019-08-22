@@ -57,6 +57,7 @@ class QCGPUQasmSimulator(BaseBackend):
                              'memory': True,
                              'max_shots': 65536,
                              'description': 'An OpenCL based qasm simulator',
+                             'coupling_map': None,
                              'basis_gates': ['u1',
                                              'u2',
                                              'u3',
@@ -167,7 +168,7 @@ class QCGPUQasmSimulator(BaseBackend):
             'status': 'COMPLETED',
             'success': True,
             'time_taken': (end - start),
-            'header': qobj.header.as_dict()
+            'header': qobj.header.to_dict()
         }
 
         return Result.from_dict(result)
@@ -207,7 +208,7 @@ class QCGPUQasmSimulator(BaseBackend):
         if not self._sample_measure:
             raise QCGPUSimulatorError('Measurements are only supported at the end')
 
-        experiment = experiment.as_dict()
+        experiment = experiment.to_dict()
         # qcgpu.backend.create_context()
 
         samples = []
@@ -220,7 +221,7 @@ class QCGPUQasmSimulator(BaseBackend):
             raise QCGPUSimulatorError('too many qubits')
 
         for operation in experiment['instructions']:
-            params = getattr(operation, 'params', [])
+            params = operation.get('params', [])
             name = operation['name']
 
             if name == 'id':
