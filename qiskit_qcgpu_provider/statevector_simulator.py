@@ -27,6 +27,7 @@ import numpy as np
 
 from qiskit.providers import BaseBackend
 from qiskit.result import Result
+from qiskit.result.models import ExperimentResult, ExperimentResultData
 from qiskit.providers.models import BackendConfiguration
 
 import qcgpu
@@ -126,14 +127,14 @@ class QCGPUStatevectorSimulator(BaseBackend):
         Returns:
             QCGPUJob: derived from BaseJob
         """
-        
+
         qcgpu.backend._create_context()
 
         job_id = str(uuid.uuid4())
         job = QCGPUJob(self, job_id, self._run_job(job_id, qobj), qobj)
         return job
 
-    #@profile
+    # @profile
     def _run_job(self, job_id, qobj):
         """Run experiments in qobj
 
@@ -152,21 +153,19 @@ class QCGPUStatevectorSimulator(BaseBackend):
             results.append(self.run_experiment(experiment))
         end = time.time()
 
-        result = {
-            'backend_name': self.name(),
-            'backend_version': self._configuration.backend_version,
-            'qobj_id': qobj.qobj_id,
-            'job_id': job_id,
-            'results': results,
-            'status': 'COMPLETED',
-            'success': True,
-            'time_taken': (end - start),
-            'header': qobj.header.to_dict()
-        }
+        result = Result(
+            backend_name=self.name(),
+            backend_version=self._configuration.backend_version,
+            qobj_id=qobj.qobj_id,
+            job_id=job_id,
+            success=True,
+            results=results,
+            time_taken=(end - start)
+        )
 
-        return Result.from_dict(result) # This can be sped up
+        return result
 
-    #@profile
+    # @profile
     def run_experiment(self, experiment):
         """Run an experiment (circuit) and return a single experiment result.
 
@@ -183,8 +182,6 @@ class QCGPUStatevectorSimulator(BaseBackend):
         """
         self._number_of_qubits = experiment.header.n_qubits
         self._statevector = 0
-        experiment = experiment.to_dict()
-        
 
         start = time.time()
 
@@ -193,50 +190,52 @@ class QCGPUStatevectorSimulator(BaseBackend):
         except OverflowError:
             raise QCGPUSimulatorError('too many qubits')
 
+        for operation in experiment.instructions:
+            name = operation.name
+            qubits = operation.qubits
+            params = [float(param)
+                      for param in getattr(operation, 'params', [])]
 
-        for operation in experiment['instructions']:
-            params = operation.get('params', [])
-            name = operation['name']
             if name == 'id':
                 logger.info('Identity gates are ignored.')
             elif name == 'barrier':
                 logger.info('Barrier gates are ignored.')
             elif name == 'u3':
-                sim.u(operation['qubits'][0], *params)
+                sim.u(qubits[0], *params)
             elif name == 'u2':
-                sim.u2(operation['qubits'][0], *params)
+                sim.u2(qubits[0], *params)
             elif name == 'u1':
-                sim.u1(operation['qubits'][0], *params)
+                sim.u1(qubits[0], *params)
             elif name == 'cx':
-                sim.cx(*operation['qubits'])
+                sim.cx(*qubits)
             elif name == 'h':
-                sim.h(operation['qubits'][0])
+                sim.h(qubits[0])
             elif name == 'x':
-                sim.x(operation['qubits'][0])
+                sim.x(qubits[0])
             elif name == 'y':
-                sim.y(operation['qubits'][0])
+                sim.y(qubits[0])
             elif name == 'z':
-                sim.z(operation['qubits'][0])
+                sim.z(qubits[0])
             elif name == 's':
-                sim.s(operation['qubits'][0])
+                sim.s(qubits[0])
             elif name == 't':
-                sim.t(operation['qubits'][0])
+                sim.t(qubits[0])
+
+        amps = [complex(z)
+                for z in sim.amplitudes().round(self._chop_threshold)]
 
         end = time.time()
 
-        amps = sim.amplitudes().round(self._chop_threshold)
-        amps = np.stack((amps.real, amps.imag), axis=-1)
-        return {
-            'name': experiment['header']['name'],
-            'shots': 1,
-            'data': {'statevector': amps},
-            'status': 'DONE',
-            'success': True,
-            'time_taken': (end - start),
-            'header': experiment['header']
-        }
+        # amps = np.stack((amps.real, amps.imag), axis=-1)
 
-    #@profile
+        return ExperimentResult(
+            shots=1,
+            success=True,
+            data=ExperimentResultData(statevector=amps),
+            time_taken=(end - start)
+        )
+
+    # @profile
     def _validate(self, qobj):
         """
         Make sure that there is:

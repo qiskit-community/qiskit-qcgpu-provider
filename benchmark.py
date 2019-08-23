@@ -7,8 +7,7 @@ import os.path
 import math
 
 from qiskit import ClassicalRegister, QuantumRegister, QuantumCircuit
-from qiskit.wrapper import load_qasm_file
-from qiskit import QISKitError, execute, Aer
+from qiskit import QiskitError, execute, Aer
 
 from qiskit_qcgpu_provider import QCGPUProvider
 
@@ -78,7 +77,10 @@ def write_csv(writer, data):
     '--single',
     default=False,
     help='Only run the benchmark for a single amount of qubits, and print an analysis')
-def benchmark(samples, qubits, out, single):
+@click.option('--burn', default=True, help='Burn the first few samples for accuracy')
+def benchmark(samples, qubits, out, single, burn):
+    burn_count = 5 if burn else 0
+
     if single:
         functions = bench_qcgpu, bench_qiskit
         times = {f.__name__: [] for f in functions}
@@ -87,15 +89,18 @@ def benchmark(samples, qubits, out, single):
         means = []
 
         qc = construct_circuit(qubits)
+
         # Run the benchmarks
-        for i in range(samples):
-            progress = (i) / (samples)
+        for i in range(samples + burn_count):
+            progress = (i) / (samples + burn_count)
             if samples > 1:
                 print("\rProgress: [{0:50s}] {1:.1f}%".format('#' * int(progress * 50), progress * 100), end="", flush=True)
 
             func = random.choice(functions)
             t = func(qc)
-            times[func.__name__].append(t)
+            
+            if i >= burn_count:
+                times[func.__name__].append(t)
 
         print('')
 
