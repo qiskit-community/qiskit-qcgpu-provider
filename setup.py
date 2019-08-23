@@ -31,6 +31,6 @@ setuptools.setup(
         "Topic :: Scientific/Engineering",
     ],
     install_requires=['qcgpu>=0.1.0'],
-    tests_require=['nose']
+    tests_require=['nose'],
     python_requires=">=3.5"
 )
