@@ -29,6 +29,7 @@ from qiskit.providers import BaseBackend
 from qiskit.result import Result
 from qiskit.result.models import ExperimentResult, ExperimentResultData
 from qiskit.providers.models import BackendConfiguration
+from qiskit.validation.base import Obj
 
 import qcgpu
 
@@ -229,13 +230,15 @@ class QCGPUStatevectorSimulator(BaseBackend):
         # amps = np.stack((amps.real, amps.imag), axis=-1)
 
         return ExperimentResult(
+            name=experiment.header.name,
             shots=1,
             success=True,
             data=ExperimentResultData(statevector=amps),
-            time_taken=(end - start)
-        )
+            time_taken=(end - start),
+            header=Obj(name=experiment.header.name))
 
     # @profile
+
     def _validate(self, qobj):
         """
         Make sure that there is:

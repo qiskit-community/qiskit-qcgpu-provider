@@ -10,10 +10,8 @@ Provider = QCGPUProvider()
 
 # Create a Quantum Register with 2 qubits.
 q = QuantumRegister(2)
-# Create a Classical Register with 2 bits.
-c = ClassicalRegister(2)
-# Create a Quantum Circuit
-qc = QuantumCircuit(q, c)
+# Create a Quantum Circuit with 2 Qubits
+qc = QuantumCircuit(q)
 
 # Add a H gate on qubit 0, putting this qubit in superposition.
 qc.h(q[0])
@@ -31,5 +29,5 @@ job_sim = execute(qc, backend_sim)
 result_sim = job_sim.result()
 
 # Show the results
-print("simulation: ", result_sim)
+print("Simulation Results: ", result_sim)
 print(result_sim.get_statevector(qc))
