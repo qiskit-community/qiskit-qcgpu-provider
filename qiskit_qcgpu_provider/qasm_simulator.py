@@ -308,9 +308,17 @@ class QCGPUQasmSimulator(BaseBackend):
         probabilities = np.reshape(np.sum(probabilities,
                                           axis=tuple(axis)),
                                    2 ** num_measured)
+
+        # Normalize probabilities when the ammount do not sum 1 because of numeric error
+        aux = []
+        prob_sum = sum(probabilities)
+
+        for i in probabilities:
+            aux.append(i/prob_sum)
+
         # Generate samples on measured qubits
         samples = self._local_random.choice(range(2 ** num_measured),
-                                            num_samples, p=probabilities)
+                                            num_samples, p=aux)
         # Convert to bit-strings
         memory = []
         for sample in samples:
